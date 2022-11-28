@@ -13,7 +13,10 @@ from utils.model import get_model, get_vocoder, get_param_num
 from utils.tools import get_configs_of, to_device, log, synth_one_sample
 from model import Tacotron2Loss
 from dataset import Dataset
+import logging
 
+numba_logger = logging.getLogger('numba')
+numba_logger.setLevel(logging.WARNING)
 from evaluate import evaluate
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -106,7 +109,7 @@ def main(args, configs):
                 if step % log_step == 0:
                     losses = [l.item() for l in losses]
                     message1 = "Step {}/{}, ".format(step, total_step)
-                    message2 = "Total Loss: {:.4f}, Mel Loss: {:.4f}, Gate Loss: {:.4f}, Guided Attention Loss: {:.4f}".format(
+                    message2 = "Total Loss: {:.4f}, Mel Loss: {:.4f}, Gate Loss: {:.4f}, Forward Sum Loss: {:.4f}, Guided Attention Loss: {:.4f}".format(
                         *losses
                     )
 

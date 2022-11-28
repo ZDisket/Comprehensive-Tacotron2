@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .blocks import LinearNorm
-from .modules import Encoder, Decoder, Postnet
+from .modules import Encoder, Decoder, Postnet, AlignmentEncoder, sequence_mask, binarize_attention_parallel
 from utils.tools import get_mask_from_lengths
 from text.symbols import symbols
 
@@ -31,6 +31,8 @@ class Tacotron2(nn.Module):
         self.encoder = Encoder(model_config)
         self.decoder = Decoder(preprocess_config, model_config)
         self.postnet = Postnet(preprocess_config, model_config)
+        self.aligner = AlignmentEncoder(n_mel_channels=80, n_text_channels=model_config["encoder"]["symbols_embedding_dim"], n_att_channels=80, temperature=0.0005)
+      
 
         self.speaker_emb = None
         if model_config["multi_speaker"]:
@@ -67,6 +69,21 @@ class Tacotron2(nn.Module):
         outputs[1] = outputs[1].transpose(-2, -1)
         return outputs
 
+    
+    
+    @torch.jit.unused
+    def run_aligner(self, text, text_len, text_mask, spect, spect_len, attn_prior):
+      text_emb = self.embedding(text)
+      text_emb = text_emb.permute(0, 2, 1)
+      text_mask = text_mask.permute(0, 2, 1) # [b, 1, mxlen] => [b, mxlen, 1]
+      spect = spect.permute(0,2,1)  #[b, mel_len, channels] => [b, channels, mel_len]
+      attn_soft, attn_logprob = self.aligner(
+          spect, text_emb, mask=text_mask == 0, attn_prior=attn_prior,conditioning=None
+      )
+      attn_hard = binarize_attention_parallel(attn_soft, text_len, spect_len)
+      attn_hard_dur = attn_hard.sum(2)
+      return attn_soft, attn_logprob, attn_hard, attn_hard_dur
+
     def forward(
         self,
         speakers,
@@ -80,7 +97,11 @@ class Tacotron2(nn.Module):
         gates=None,
         spker_embeds=None,
     ):
+        text_masks = torch.unsqueeze(sequence_mask(src_lens, texts.size(1)), 1)
         embedded_inputs = self.embedding(texts).transpose(1, 2)
+        attn_soft, attn_logprob, attn_hard, attn_hard_dur = self.run_aligner(texts,src_lens,text_masks,mels,mel_lens,None)
+        
+        
         encoder_outputs = self.encoder(embedded_inputs, src_lens)
 
         if self.speaker_emb is not None:
@@ -101,7 +122,7 @@ class Tacotron2(nn.Module):
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
         return self.parse_output(
-            [mel_outputs, mel_outputs_postnet, gate_outputs, alignments],
+            [mel_outputs, mel_outputs_postnet, gate_outputs, alignments, attn_logprob, attn_hard],
             mel_lens)
 
     def inference(
