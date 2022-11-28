@@ -5,7 +5,11 @@ import numpy as np
 from scipy.ndimage import zoom
 from skimage.data import camera
 from scipy.spatial.distance import cdist
+import torch
+from numba import jit
+from numba import vectorize,float64, int64
 
+from numba import njit,guvectorize
 
 def duration_to_alignment(in_duration):
   total_len = np.sum(in_duration)
@@ -87,7 +91,8 @@ def compensate_duration_mel(in_durs,in_mel_len,in_text_len,in_audiofn):
                 
     return durations_n
 
-    
+
+@jit(nopython=True)
 def gather_dist(in_mtr,in_points):
   #initialize with known size for fast
   full_coords = [(0,0) for x in range(in_mtr.shape[0] * in_mtr.shape[1])]
@@ -97,19 +102,14 @@ def gather_dist(in_mtr,in_points):
       full_coords[i] = (x,y)
       i += 1
   
-  return cdist(full_coords, in_points,"euclidean")
-    
-def create_guided(in_align,in_pvt,looseness):
-  new_att = np.ones(in_align.shape,dtype=np.float32)
-  # It is dramatically faster that we first gather all the points and calculate than do it manually
-  # for each point in for loop
-  dist_arr = gather_dist(in_align,in_pvt)
-  # Scale looseness based on attention size. (addition works better than mul). Also divide by 100
-  # because having user input 3.35 is nicer
-  real_loose = (looseness / 100) * (new_att.shape[0] + new_att.shape[1])
+  return full_coords
+  
+
+@guvectorize([(int64,int64,float64[:,:], float64[:,:],float64[:,:],float64,float64[:,:])],'(),(),(a,b),(c,d),(e,f),()->(a,b)',nopython=True)
+def comp_gatt(xlen,ylen,new_att,dist_arr,in_pvt,real_loose,out):
   g_idx = 0
-  for x in range(0, new_att.shape[0]):
-    for y in range(0, new_att.shape[1]):
+  for x in range(0, xlen):
+    for y in range(0, ylen):
       min_point_idx = dist_arr[g_idx].argmin()
 
       closest_pvt = in_pvt[min_point_idx]
@@ -118,9 +118,23 @@ def create_guided(in_align,in_pvt,looseness):
 
       g_idx += 1
       
-      new_att[x,y] = distance
+      out[x,y] = distance
+    
 
-  return np.clip(new_att,0.0,1.0)
+    
+
+
+def create_guided(in_align,in_pvt,looseness):
+  new_att = np.ones(in_align.shape,dtype=np.float64)
+  # It is dramatically faster that we first gather all the points and calculate than do it manually
+  # for each point in for loop
+  dist_arr = cdist(gather_dist(in_align,in_pvt), in_pvt,"euclidean")
+  # Scale looseness based on attention size. (addition works better than mul). Also divide by 100
+  # because having user input 3.35 is nicer
+  real_loose = (looseness / 100) * (new_att.shape[0] + new_att.shape[1])
+  return np.clip(comp_gatt(new_att.shape[0],new_att.shape[1],new_att,dist_arr,in_pvt,real_loose),0.0,1.0)
+  
+
 
 def durations_to_mask(in_durs,in_mel_len,in_text_len,in_audiofn,in_loose):
     
