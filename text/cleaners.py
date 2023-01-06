@@ -15,6 +15,10 @@ hyperparameter. Some cleaners are English-specific. You'll typically want to use
 import re
 from unidecode import unidecode
 from .numbers import normalize_numbers
+from phonemizer import phonemize
+import phonemizer
+global_phonemizer = phonemizer.backend.EspeakBackend(language='en-us', preserve_punctuation=True,  with_stress=True)
+spanish_phonemizer = phonemizer.backend.EspeakBackend(language='es-la', preserve_punctuation=True,  with_stress=True)
 
 
 # Regular expression matching whitespace:
@@ -88,3 +92,22 @@ def english_cleaners(text):
     text = expand_abbreviations(text)
     text = collapse_whitespace(text)
     return text
+
+def english_cleaners2(text):
+  '''Pipeline for IPA English text, including abbreviation expansion. + punctuation + stress'''
+  text = convert_to_ascii(text)
+  text = lowercase(text)
+  text = expand_abbreviations(text)
+  phonemes = global_phonemizer.phonemize([text], strip=True, njobs=1)
+  phonemes = phonemes[0]
+  phonemes = collapse_whitespace(phonemes)
+  return phonemes
+
+
+def spanish_cleaners(text):
+  '''Pipeline for IPA Spanish text, punctuation + stress'''
+  text = lowercase(text)
+  phonemes = spanish_phonemizer.phonemize([text], strip=True, njobs=1)
+  phonemes = phonemes[0].replace("(es-la)","").replace("(en)","")
+  phonemes = collapse_whitespace(phonemes)
+  return phonemes
