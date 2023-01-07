@@ -66,13 +66,14 @@ class Preprocessor:
         mel_max = -float('inf')
 
         speakers = {self.dataset: 0}
-        with open(os.path.join(self.in_dir, "metadata.csv"), encoding="utf-8") as f:
+        with open(os.path.join(self.in_dir, "filelist_p.txt"), encoding="utf-8") as f:
             for line in tqdm(f.readlines()):
                 parts = line.strip().split("|")
-                basename = parts[0]
-                text = parts[2]
+                wav_fn = parts[0]
+                basename = wav_fn.split("/")[-1].split(".")[0]
+                text = parts[1]
 
-                wav_path = os.path.join(self.in_dir, "wavs", "{}.wav".format(basename))
+                wav_path = os.path.join(self.in_dir, wav_fn)
 
                 ret = self.process_utterance(text, wav_path, self.dataset, basename)
                 if ret is None:
