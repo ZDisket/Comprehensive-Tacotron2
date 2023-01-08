@@ -84,9 +84,9 @@ def transliteration_cleaners(text):
     return text
 
 def vbasic_cleaners(text):
-  '''Only collapses whitespaces, for already processed text'''
-  text = collapse_whitespace(text)
-  return text
+    '''Only collapses whitespaces, for already processed text'''
+    text = collapse_whitespace(text)
+    return text
 
 def english_cleaners(text):
     '''Pipeline for English text, including number and abbreviation expansion.'''
