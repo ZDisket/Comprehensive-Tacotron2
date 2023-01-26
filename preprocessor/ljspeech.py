@@ -66,6 +66,7 @@ class Preprocessor:
         mel_max = -float('inf')
 
         speakers = {self.dataset: 0}
+        n_files = 0
         with open(os.path.join(self.in_dir, "filelist_p.txt"), encoding="utf-8") as f:
             for line in tqdm(f.readlines()):
                 parts = line.strip().split("|")
@@ -74,12 +75,20 @@ class Preprocessor:
                 text = parts[1]
 
                 wav_path = os.path.join(self.in_dir, wav_fn)
+                au_dur = librosa.get_duration(filename=wav_path)
+                if au_dur > 9.0:
+                    print(f"File {wav_fn} is too long, {au_dur}, skipping") 
+                    ret = None
+                else:
+                    ret = self.process_utterance(text, wav_path, self.dataset, basename)
+                    
 
-                ret = self.process_utterance(text, wav_path, self.dataset, basename)
+                
                 if ret is None:
                     continue
                 else:
                     info, n, m_min, m_max = ret
+                    n_files += 1
 
                 if self.val_prior is not None:
                     if basename not in self.val_prior:
@@ -97,6 +106,7 @@ class Preprocessor:
                 n_frames += n
 
         # Save files
+        
         with open(os.path.join(self.out_dir, "speakers.json"), "w") as f:
             f.write(json.dumps(speakers))
 
@@ -114,6 +124,10 @@ class Preprocessor:
                 n_frames * self.hop_length / self.sampling_rate / 3600
             )
         )
+        
+        
+        self.val_size = round(n_files * 0.05) # 5% validation
+        print(f"Done {n_files} total, now {self.val_size} for validation")
 
         if self.val_prior is not None:
             assert len(out) == 0

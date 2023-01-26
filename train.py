@@ -43,10 +43,18 @@ def main(args, configs):
 
     # Prepare model
     model, optimizer = get_model(args, configs, device, train=True)
+    
+    if len(args.pretrained):
+        print(f"Warm starting from checkpoint {args.pretrained}")
+        ckpt = torch.load(args.pretrained)
+        model.load_state_dict(ckpt["model"])
+        
     model = nn.DataParallel(model)
     num_param = get_param_num(model)
     Loss = Tacotron2Loss(preprocess_config, model_config, train_config).to(device)
     print("Number of Tacotron2 Parameters:", num_param)
+    
+
 
     # Load vocoder
     vocoder = get_vocoder(model_config, device)
@@ -195,6 +203,13 @@ if __name__ == "__main__":
         type=str,
         required=True,
         help="name of dataset",
+    )
+    parser.add_argument(
+        "--pretrained",
+        type=str,
+        required=False,
+        help="Path to pretrained checkpoint file to finetune from",
+        default="",
     )
     args = parser.parse_args()
 
