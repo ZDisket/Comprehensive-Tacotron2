@@ -48,8 +48,6 @@ class Preprocessor:
         )
         self.val_prior = self.val_prior_names(os.path.join(self.out_dir, "val.txt"))
         self.speaker_emb = None
-        if config["preprocessing"]["speaker_embedder"] != "none":
-            self.speaker_emb = PreDefinedEmbedder(config)
 
     def val_prior_names(self, val_prior_path):
         val_prior_names = set()
