@@ -11,7 +11,6 @@ from pathlib import Path
 
 import audio as Audio
 from text import text_to_sequence
-from model import PreDefinedEmbedder
 from utils.tools import save_mel_and_audio, plot_embedding
 
 random.seed(1234)
