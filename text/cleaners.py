@@ -24,6 +24,51 @@ spanish_phonemizer = phonemizer.backend.EspeakBackend(language='es-419', preserv
 # Regular expression matching whitespace:
 _whitespace_re = re.compile(r'\s+')
 
+
+
+from g2p_en import G2p as grapheme_to_phn
+
+_punctuation = "!'(),.:;?"
+_special = "- "
+_arpa_exempt = _punctuation + _special
+
+arpa_g2p = grapheme_to_phn()
+
+def to_arpa(in_str):
+    phn_arr = arpa_g2p(in_str)
+
+    arpa_str = "{"
+    in_chain = True
+
+    # Iterative array-traverse approach to build ARPA string. Phonemes must be in curly braces, but not punctuation
+    for token in phn_arr:
+        
+        if token in _arpa_exempt and in_chain:
+            arpa_str += "}"
+            in_chain = False
+            
+
+        if token not in _arpa_exempt and not in_chain:
+            arpa_str += "{"
+            in_chain = True
+
+   
+        arpa_str += " " + token
+
+    if in_chain:
+        arpa_str += "}"
+        
+    #removing multiple whitespace
+    arpa_str = " ".join(arpa_str.split())
+    arpa_str = arpa_str.replace("{ ","{")
+    # string results in double-dir spaced punctuation "{M AY1} , {M AY1}", we want it only single right spaced: "{M AY1}, {M AY1}"
+    for p in _punctuation:
+        arpa_str = arpa_str.replace(f" {p}",f"{p}")
+    
+    return arpa_str
+
+
+
 # List of (regular expression, replacement) pairs for abbreviations:
 _abbreviations = [(re.compile('\\b%s\\.' % x[0], re.IGNORECASE), x[1]) for x in [
     ('mrs', 'misess'),
