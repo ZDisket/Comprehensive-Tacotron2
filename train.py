@@ -48,7 +48,11 @@ def main(args, configs):
         print(f"Warm starting from checkpoint {args.pretrained}")
         ckpt = torch.load(args.pretrained)
         model.load_state_dict(ckpt["model"])
-        
+    
+    if args.checkpoint_interval > 1:
+      print(f"Overriding checkpoint interval to {args.checkpoint_interval}")
+      train_config["step"]["save_step"] = args.checkpoint_interval
+
     model = nn.DataParallel(model)
     num_param = get_param_num(model)
     Loss = Tacotron2Loss(preprocess_config, model_config, train_config).to(device)
@@ -223,6 +227,13 @@ if __name__ == "__main__":
         required=False,
         help="Path override for train",
         default="",
+    )
+    parser.add_argument(
+        "--checkpoint-interval",
+        type=int,
+        required=False,
+        help="Checkpoint interval override for train",
+        default=0,
     )
     args = parser.parse_args()
 
