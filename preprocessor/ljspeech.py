@@ -14,6 +14,9 @@ from utils.tools import save_mel_and_audio
 random.seed(1234)
 
 
+
+
+
 class Preprocessor:
     def __init__(self, config):
         self.dataset = config["dataset"]
@@ -76,7 +79,7 @@ class Preprocessor:
 
                 wav_path = os.path.join(self.in_dir, wav_fn)
                 au_dur = librosa.get_duration(filename=wav_path)
-                if au_dur > 9.0:
+                if au_dur > 13.0:
                     print(f"File {wav_fn} is too long, {au_dur}, skipping") 
                     ret = None
                 else:

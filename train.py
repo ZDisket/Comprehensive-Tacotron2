@@ -60,6 +60,12 @@ def main(args, configs):
     vocoder = get_vocoder(model_config, device)
 
     # Init logger
+    
+    if len(args.out_path):
+        train_config["path"]["log_path"] = os.path.join(args.out_path, "logs")
+        train_config["path"]["ckpt_path"] = os.path.join(args.out_path, "checkpoints")
+        train_config["path"]["result_path"] = os.path.join(args.out_path, "val")
+        
     for p in train_config["path"].values():
         os.makedirs(p, exist_ok=True)
     train_log_path = os.path.join(train_config["path"]["log_path"], "train")
@@ -209,6 +215,13 @@ if __name__ == "__main__":
         type=str,
         required=False,
         help="Path to pretrained checkpoint file to finetune from",
+        default="",
+    )
+    parser.add_argument(
+        "--out-path",
+        type=str,
+        required=False,
+        help="Path override for train",
         default="",
     )
     args = parser.parse_args()
