@@ -8,9 +8,9 @@ import numpy as np
 from tqdm import tqdm
 
 import audio as Audio
-from text import text_to_sequence
+from text import text_to_sequence, cleaned_text_to_sequence
 from utils.tools import save_mel_and_audio
-
+from text.cleaners import arpa_cleaners
 random.seed(1234)
 
 
@@ -170,7 +170,8 @@ class Preprocessor:
     def process_utterance(self, raw_text, wav_path, speaker, basename):
 
         # Preprocess text
-        text = np.array(text_to_sequence(raw_text, self.cleaners))
+        text_phon = arpa_cleaners(raw_text)
+        text = np.array(cleaned_text_to_sequence(text_phon))
 
         # Load and process wav files
         wav_raw, wav = self.load_audio(wav_path)

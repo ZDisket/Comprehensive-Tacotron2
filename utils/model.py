@@ -72,6 +72,7 @@ def get_vocoder(config, device):
 
 
 def vocoder_infer(mels, vocoder, model_config, preprocess_config, lengths=None):
+    mels = mels[:,:80,:]
     name = model_config["vocoder"]["model"]
     with torch.no_grad():
         if name == "MelGAN":

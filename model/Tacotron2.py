@@ -31,7 +31,7 @@ class Tacotron2(nn.Module):
         self.encoder = Encoder(model_config)
         self.decoder = Decoder(preprocess_config, model_config)
         self.postnet = Postnet(preprocess_config, model_config)
-        self.aligner = AlignmentEncoder(n_mel_channels=80, n_text_channels=model_config["encoder"]["symbols_embedding_dim"], n_att_channels=80, temperature=0.0005)
+        self.aligner = AlignmentEncoder(n_mel_channels=self.n_mel_channels, n_text_channels=model_config["encoder"]["symbols_embedding_dim"], n_att_channels=self.n_mel_channels, temperature=0.0005)
       
 
         self.speaker_emb = None

@@ -19,11 +19,13 @@ from phonemizer import phonemize
 import phonemizer
 global_phonemizer = phonemizer.backend.EspeakBackend(language='en-us', preserve_punctuation=True,  with_stress=True)
 spanish_phonemizer = phonemizer.backend.EspeakBackend(language='es-419', preserve_punctuation=True,  with_stress=True)
+from .arpa import ARPAPhonemizer
 
 
 # Regular expression matching whitespace:
 _whitespace_re = re.compile(r'\s+')
 
+arpa_phonemizer = ARPAPhonemizer()
 
 
 from g2p_en import G2p as grapheme_to_phn
@@ -141,6 +143,15 @@ def english_cleaners(text):
     text = expand_abbreviations(text)
     text = collapse_whitespace(text)
     return text
+
+def arpa_cleaners(text):
+  '''Pipeline for ARPA English text, including abbreviation expansion. + punctuation + stress'''
+  text = convert_to_ascii(text)
+  text = lowercase(text)
+  text = expand_abbreviations(text)
+  phonemes = arpa_phonemizer.doARPA(text)
+
+  return phonemes
 
 def english_cleaners2(text):
   '''Pipeline for IPA English text, including abbreviation expansion. + punctuation + stress'''
