@@ -8,7 +8,7 @@ preprocessing:
   sanity_check: False # if Ture, then preprocess a single data and quit
   val_size: 512
   text:
-    text_cleaners: ["vbasic_cleaners"]
+    text_cleaners: ["arpa_cleaners"]
     language: "en"
   audio:
     sampling_rate: 44100
@@ -22,7 +22,7 @@ preprocessing:
     hop_length: 512
     win_length: 2048
   mel:
-    n_mel_channels: 80
-    mel_fmin: 20
+    n_mel_channels: 88
+    mel_fmin: 00
     mel_fmax: 11025 # please set to 8000 for HiFi-GAN vocoder, set to null for MelGAN vocoder
     normalize: False
