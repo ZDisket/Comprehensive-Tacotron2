@@ -40,7 +40,7 @@ class ISTFTNetFE(torch.nn.Module):
         dummy_mel = torch.randn((1, 88, 600)) # create dummy mel input
         for dev in ex_devices:
             self.stft = self.stft.to(dev)
-            self.stft.window = stft.window.to(dev)
+            self.stft.window = self.stft.window.to(dev)
 
             self.gen = self.gen.to(dev)
 

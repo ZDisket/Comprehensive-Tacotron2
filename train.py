@@ -41,6 +41,11 @@ def main(args, configs):
         collate_fn=dataset.collate_fn,
     )
 
+    if len(args.out_path):
+      train_config["path"]["log_path"] = os.path.join(args.out_path, "logs")
+      train_config["path"]["ckpt_path"] = os.path.join(args.out_path, "checkpoints")
+      train_config["path"]["result_path"] = os.path.join(args.out_path, "val")
+
     # Prepare model
     model, optimizer = get_model(args, configs, device, train=True)
     
@@ -65,10 +70,7 @@ def main(args, configs):
 
     # Init logger
     
-    if len(args.out_path):
-        train_config["path"]["log_path"] = os.path.join(args.out_path, "logs")
-        train_config["path"]["ckpt_path"] = os.path.join(args.out_path, "checkpoints")
-        train_config["path"]["result_path"] = os.path.join(args.out_path, "val")
+
         
     for p in train_config["path"].values():
         os.makedirs(p, exist_ok=True)
