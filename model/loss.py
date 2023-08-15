@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from .fagal import create_guided, get_pivot_points
 from torch.nn import functional as F
 import numpy as np
 from numba import jit
@@ -54,22 +53,29 @@ class Tacotron2Loss(nn.Module):
     def __init__(self, preprocess_config, model_config, train_config):
         super(Tacotron2Loss, self).__init__()
         self.n_frames_per_step = model_config["decoder"]["n_frames_per_step"]
-        self.use_guided_attn_loss = train_config["optimizer"]["guided_attn"]
+        self.use_cac = train_config["optimizer"]["use_cac"]
+        self.use_guided_attn_loss = train_config["optimizer"]["guided_attn"] and not self.use_cac # CAC turns off guided attention loss
+
+    
 
         self.mse_loss = nn.MSELoss()
         self.bce_loss = nn.BCEWithLogitsLoss()
-        self.forward_sum = ForwardSumLoss()
+        if self.use_cac:
+            self.forward_sum = ForwardSumLoss()
+            print("Using Convolutional Attention Consistency")
+        
         if self.use_guided_attn_loss:
             self.guided_attn_loss = GuidedAttentionLoss(
                 sigma=train_config["optimizer"]["guided_sigma"],
                 alpha=train_config["optimizer"]["guided_lambda"],
             )
+            print("Using diagonal guided attention loss")
 
     def forward(self, inputs, predictions):
         mel_target, input_lengths, output_lengths, r_len_pad, gate_target \
                                 = inputs[6], inputs[4], inputs[7], inputs[9], inputs[10]
         mel_out, mel_out_postnet, gate_out, alignments, attn_logprob, attn_hard = predictions
-        attn_hard = attn_hard.squeeze()
+        
 
         mel_target.requires_grad = False
         gate_target.requires_grad = False
@@ -79,18 +85,26 @@ class Tacotron2Loss(nn.Module):
         mel_loss = self.mse_loss(mel_out, mel_target) + \
             self.mse_loss(mel_out_postnet, mel_target)
         gate_loss = self.bce_loss(gate_out, gate_target)
-        al_forward_sum = self.forward_sum(attn_logprob=attn_logprob, in_lens=input_lengths, out_lens=output_lengths)
 
+        total_loss = mel_loss + gate_loss
 
-        if self.use_guided_attn_loss:                   
-            #attn_loss = self.guided_attn_loss(alignments, attn_hard.squeeze(), input_lengths, \
-             #                   (output_lengths + r_len_pad)//self.n_frames_per_step)
-            attn_loss = self.mse_loss(alignments, attn_hard)
-            total_loss = mel_loss + gate_loss + attn_loss + al_forward_sum
-            return total_loss, mel_loss, gate_loss, attn_loss, al_forward_sum
+        if self.use_cac:
+            attn_hard = attn_hard.squeeze()
+            al_forward_sum = self.forward_sum(attn_logprob=attn_logprob, in_lens=input_lengths, out_lens=output_lengths)
+            cac_loss = self.mse_loss(alignments, attn_hard)
+            total_attn_loss = al_forward_sum + cac_loss
+    
+            total_loss += total_attn_loss
+            
+            return total_loss, mel_loss, gate_loss, al_forward_sum, total_attn_loss 
+        elif self.use_guided_attn_loss:
+            attn_loss = self.guided_attn_loss(alignments, input_lengths, \
+                                (output_lengths + r_len_pad)//self.n_frames_per_step)
+            return total_loss, mel_loss, gate_loss, torch.tensor([0.], device=mel_target.device), attn_loss
         else:
-            total_loss = mel_loss + gate_loss + al_forward_sum
-            return total_loss, mel_loss, gate_loss, al_forward_sum, torch.tensor([0.], device=mel_target.device)
+            return total_loss, mel_loss, gate_loss, torch.tensor([0.], device=mel_target.device), torch.tensor([0.], device=mel_target.device)
+            
+    
 
 
 class GuidedAttentionLoss(nn.Module):
@@ -119,25 +133,22 @@ class GuidedAttentionLoss(nn.Module):
         self.reset_always = reset_always
         self.guided_attn_masks = None
         self.masks = None
-        
-        self.vec_pivoter = np.vectorize(get_pivot_points)
 
     def _reset_masks(self):
         self.guided_attn_masks = None
         self.masks = None
 
-    def forward(self, att_ws,hard_atts, ilens, olens):
+    def forward(self, att_ws, ilens, olens):
         """Calculate forward propagation.
         Args:
             att_ws (Tensor): Batch of attention weights (B, T_max_out, T_max_in).
-            hard_atts (Tensor): Batch of hard attentions from sep (B, T_max_out, T_max_in)
             ilens (LongTensor): Batch of input lenghts (B,).
             olens (LongTensor): Batch of output lenghts (B,).
         Returns:
             Tensor: Guided attention loss value.
         """
         if self.guided_attn_masks is None:
-            self.guided_attn_masks = self._make_guided_attention_masks(ilens, olens, hard_atts.cpu().numpy()).to(
+            self.guided_attn_masks = self._make_guided_attention_masks(ilens, olens).to(
                 att_ws.device
             )
         if self.masks is None:
@@ -148,26 +159,46 @@ class GuidedAttentionLoss(nn.Module):
             self._reset_masks()
         return self.alpha * loss
 
-    def _make_guided_attention_masks(self, ilens, olens, hard_atts):
+    def _make_guided_attention_masks(self, ilens, olens):
         n_batches = len(ilens)
         max_ilen = max(ilens)
         max_olen = max(olens)
         guided_attn_masks = torch.zeros((n_batches, max_olen, max_ilen))
         for idx, (ilen, olen) in enumerate(zip(ilens, olens)):
             guided_attn_masks[idx, :olen, :ilen] = self._make_guided_attention_mask(
-                ilen, olen, hard_atts[idx]
+                ilen, olen, self.sigma
             )
         return guided_attn_masks
 
-    
-    def _make_guided_attention_mask(self,ilen, olen, hard_att):
-        """Make guided attention mask. hard
+    @staticmethod
+    def _make_guided_attention_mask(ilen, olen, sigma):
+        """Make guided attention mask.
         Examples:
+            >>> guided_attn_mask =_make_guided_attention(5, 5, 0.4)
+            >>> guided_attn_mask.shape
+            torch.Size([5, 5])
+            >>> guided_attn_mask
+            tensor([[0.0000, 0.1175, 0.3935, 0.6753, 0.8647],
+                    [0.1175, 0.0000, 0.1175, 0.3935, 0.6753],
+                    [0.3935, 0.1175, 0.0000, 0.1175, 0.3935],
+                    [0.6753, 0.3935, 0.1175, 0.0000, 0.1175],
+                    [0.8647, 0.6753, 0.3935, 0.1175, 0.0000]])
+            >>> guided_attn_mask =_make_guided_attention(3, 6, 0.4)
+            >>> guided_attn_mask.shape
+            torch.Size([6, 3])
+            >>> guided_attn_mask
+            tensor([[0.0000, 0.2934, 0.7506],
+                    [0.0831, 0.0831, 0.5422],
+                    [0.2934, 0.0000, 0.2934],
+                    [0.5422, 0.0831, 0.0831],
+                    [0.7506, 0.2934, 0.0000],
+                    [0.8858, 0.5422, 0.0831]])
         """
-        pivots = np.argwhere(hard_att > 0.8)
-        guided_att = torch.from_numpy(create_guided(hard_att,pivots,2.5))
-        return guided_att[:olen,:ilen]
-
+        grid_x, grid_y = torch.meshgrid(torch.arange(olen), torch.arange(ilen))
+        grid_x, grid_y = grid_x.float().to(olen.device), grid_y.float().to(ilen.device)
+        return 1.0 - torch.exp(
+            -((grid_y / ilen - grid_x / olen) ** 2) / (2 * (sigma ** 2))
+        )
 
     def _make_masks(self, ilens, olens):
         """Make masks indicating non-padded part.

@@ -23,6 +23,7 @@ class Tacotron2(nn.Module):
         self.mask_padding = train_config["optimizer"]["mask_padding"]
         self.fp16_run = train_config["optimizer"]["fp16_run"]
         self.n_mel_channels = preprocess_config["preprocessing"]["mel"]["n_mel_channels"]
+        self.use_cac = train_config["optimizer"]["use_cac"]
         self.embedding = nn.Embedding(
             n_symbols, model_config["encoder"]["symbols_embedding_dim"])
         std = sqrt(2.0 / (n_symbols  + model_config["encoder"]["symbols_embedding_dim"]))
@@ -31,7 +32,10 @@ class Tacotron2(nn.Module):
         self.encoder = Encoder(model_config)
         self.decoder = Decoder(preprocess_config, model_config)
         self.postnet = Postnet(preprocess_config, model_config)
-        self.aligner = AlignmentEncoder(n_mel_channels=self.n_mel_channels, n_text_channels=model_config["encoder"]["symbols_embedding_dim"], n_att_channels=self.n_mel_channels, temperature=0.0005)
+
+        if self.use_cac:
+            self.aligner = AlignmentEncoder(n_mel_channels=self.n_mel_channels, n_text_channels=model_config["encoder"]["symbols_embedding_dim"], n_att_channels=self.n_mel_channels, temperature=0.0005)
+        
       
 
         self.speaker_emb = None
@@ -97,9 +101,15 @@ class Tacotron2(nn.Module):
         gates=None,
         spker_embeds=None,
     ):
-        text_masks = torch.unsqueeze(sequence_mask(src_lens, texts.size(1)), 1)
+        
         embedded_inputs = self.embedding(texts).transpose(1, 2)
-        attn_soft, attn_logprob, attn_hard, attn_hard_dur = self.run_aligner(texts,src_lens,text_masks,mels,mel_lens,None)
+        if self.use_cac:
+            text_masks = torch.unsqueeze(sequence_mask(src_lens, texts.size(1)), 1)
+            attn_soft, attn_logprob, attn_hard, attn_hard_dur = self.run_aligner(texts,src_lens,text_masks,mels,mel_lens,None)
+        else:
+            attn_soft, attn_logprob, attn_hard, attn_hard_dur = torch.zeros(1,1), torch.zeros(1,1), torch.zeros(1,1), torch.zeros(1,1)
+            
+       
         
         
         encoder_outputs = self.encoder(embedded_inputs, src_lens)
