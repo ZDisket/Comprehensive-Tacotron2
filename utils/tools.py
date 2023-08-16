@@ -92,7 +92,8 @@ def log(
         logger.add_scalar("Loss/total_loss", losses[0], step)
         logger.add_scalar("Loss/mel_loss", losses[1], step)
         logger.add_scalar("Loss/gate_loss", losses[2], step)
-        logger.add_scalar("Loss/attn_loss", losses[3], step)
+        logger.add_scalar("Loss/forward_sum_loss", losses[3], step)
+        logger.add_scalar("Loss/attn_loss", losses[4], step)
 
     if grad_norm is not None:
         logger.add_scalar("Grad/grad_norm", grad_norm, step)
