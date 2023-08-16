@@ -100,6 +100,7 @@ class Tacotron2Loss(nn.Module):
         elif self.use_guided_attn_loss:
             attn_loss = self.guided_attn_loss(alignments, input_lengths, \
                                 (output_lengths + r_len_pad)//self.n_frames_per_step)
+            total_loss += attn_loss
             return total_loss, mel_loss, gate_loss, torch.tensor([0.], device=mel_target.device), attn_loss
         else:
             return total_loss, mel_loss, gate_loss, torch.tensor([0.], device=mel_target.device), torch.tensor([0.], device=mel_target.device)
