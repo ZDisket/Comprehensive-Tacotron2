@@ -112,7 +112,7 @@ def main(args, configs):
                 output = model(*(batch[2:]))
 
                 # Cal Loss
-                losses = Loss(batch, output)
+                losses = Loss(batch, output, epoch)
                 total_loss = losses[0]
 
                 # Backward
@@ -179,7 +179,7 @@ def main(args, configs):
 
                 if step % val_step == 0:
                     model.eval()
-                    message = evaluate(model, step, configs, mel_stats, val_logger, vocoder, len(losses))
+                    message = evaluate(model, step, configs, mel_stats, val_logger, vocoder, len(losses), epoch)
                     with open(os.path.join(val_log_path, "log.txt"), "a") as f:
                         f.write(message + "\n")
                     outer_bar.write(message)

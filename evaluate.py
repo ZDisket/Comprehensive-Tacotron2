@@ -15,7 +15,7 @@ from dataset import Dataset
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def evaluate(model, step, configs, mel_stats, logger=None, vocoder=None, len_losses=3):
+def evaluate(model, step, configs, mel_stats, logger=None, vocoder=None, len_losses=3, epoch=0):
     preprocess_config, model_config, train_config = configs
 
     # Get dataset
@@ -44,7 +44,7 @@ def evaluate(model, step, configs, mel_stats, logger=None, vocoder=None, len_los
                 output = model(*(batch[2:]))
 
                 # Cal Loss
-                losses = Loss(batch, output)
+                losses = Loss(batch, output, epoch)
 
                 for i in range(len(losses)):
                     loss_sums[i] += losses[i].item() * len(batch[0])

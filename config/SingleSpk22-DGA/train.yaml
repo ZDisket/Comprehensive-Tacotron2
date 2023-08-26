@@ -4,7 +4,7 @@ path:
   result_path: "./output/result/SingleSpk"
 optimizer:
   mask_padding: True # set model's padded outputs to padded values
-  use_cac: True # Apply Convolutional Attention Consistency. Turns off guided attention loss
+  use_cac: False # Apply Convolutional Attention Consistency. Turns off guided attention loss
   guided_attn: True # apply diagonal guided attention loss
   cac_loss_hard_mul: 0.5 # Hard conv att loss multiplier for CAC
   bin_loss_start_epoch: 60

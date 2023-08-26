@@ -4,6 +4,42 @@ from torch.nn import functional as F
 import numpy as np
 from numba import jit
 
+
+class CharbonnierLoss(nn.Module):
+    """Charbonnier Loss (L1)"""
+    def __init__(self, eps=1e-6):
+        super(CharbonnierLoss, self).__init__()
+        self.eps = eps
+
+    def forward(self, x, y):
+        b, c, h = y.size()
+        loss = torch.sum(torch.sqrt((x - y).pow(2) + self.eps**2))
+        return loss/(c*b*h)
+
+
+class BinLoss(torch.nn.modules.loss._Loss):
+    def __init__(self):
+        super().__init__()
+
+    @property
+    def input_types(self):
+        return {
+            "hard_attention": NeuralType(('B', 'S', 'T_spec', 'T_text'), ProbsType()),
+            "soft_attention": NeuralType(('B', 'S', 'T_spec', 'T_text'), ProbsType()),
+        }
+
+    @property
+    def output_types(self):
+        return {
+            "bin_loss": NeuralType(elements_type=LossType()),
+        }
+
+
+    def forward(self, hard_attention, soft_attention):
+        log_sum = torch.log(torch.clamp(soft_attention[hard_attention == 1], min=1e-12)).sum()
+        return -log_sum / hard_attention.sum()
+
+
 class ForwardSumLoss(torch.nn.modules.loss._Loss):
     def __init__(self, blank_logprob=-1):
         super().__init__()
@@ -55,6 +91,9 @@ class Tacotron2Loss(nn.Module):
         self.n_frames_per_step = model_config["decoder"]["n_frames_per_step"]
         self.use_cac = train_config["optimizer"]["use_cac"]
         self.use_guided_attn_loss = train_config["optimizer"]["guided_attn"] and not self.use_cac # CAC turns off guided attention loss
+        self.cac_hard_mul = train_config["optimizer"]["cac_loss_hard_mul"]
+        self.bin_loss_start_epoch = train_config["optimizer"]["bin_loss_start_epoch"]
+        self.bin_loss_warmup_epochs = train_config["optimizer"]["bin_loss_warmup_epochs"]
 
     
 
@@ -62,6 +101,8 @@ class Tacotron2Loss(nn.Module):
         self.bce_loss = nn.BCEWithLogitsLoss()
         if self.use_cac:
             self.forward_sum = ForwardSumLoss()
+            self.bin_loss = BinLoss()
+            self.charb_loss = CharbonnierLoss()
             print("Using Convolutional Attention Consistency")
         
         if self.use_guided_attn_loss:
@@ -71,10 +112,10 @@ class Tacotron2Loss(nn.Module):
             )
             print("Using diagonal guided attention loss")
 
-    def forward(self, inputs, predictions):
+    def forward(self, inputs, predictions, epoch):
         mel_target, input_lengths, output_lengths, r_len_pad, gate_target \
                                 = inputs[6], inputs[4], inputs[7], inputs[9], inputs[10]
-        mel_out, mel_out_postnet, gate_out, alignments, attn_logprob, attn_hard = predictions
+        mel_out, mel_out_postnet, gate_out, alignments, attn_logprob, attn_hard, conv_att_soft = predictions
         
 
         mel_target.requires_grad = False
@@ -88,11 +129,21 @@ class Tacotron2Loss(nn.Module):
 
         total_loss = mel_loss + gate_loss
 
-        if self.use_cac:
-            attn_hard = attn_hard.squeeze()
+        if self.use_cac:            
             al_forward_sum = self.forward_sum(attn_logprob=attn_logprob, in_lens=input_lengths, out_lens=output_lengths)
-            cac_loss = self.mse_loss(alignments, attn_hard)
+            soft_cac_loss = self.charb_loss(alignments, # alignments =  [b, x, y]
+                                     conv_att_soft.squeeze()) # conv_att_soft = [b, 1, x, y] -> [b, x, y]
+            
+            hard_cac_loss = self.charb_loss(alignments, # alignments =  [b, x, y]
+                                     attn_hard.squeeze()) # attn_hard = [b, 1, x, y] -> [b, x, y]
+            
+            cac_loss = soft_cac_loss + hard_cac_loss * self.cac_hard_mul
             total_attn_loss = al_forward_sum + cac_loss
+            
+            if epoch > self.bin_loss_start_epoch:
+                bin_loss_scale = min((epoch - self.bin_loss_start_epoch) / self.bin_loss_warmup_epochs, 1.0)
+                al_match_loss = self.bin_loss(hard_attention=attn_hard, soft_attention=conv_att_soft) * bin_loss_scale
+                total_attn_loss += al_match_loss
     
             total_loss += total_attn_loss
             

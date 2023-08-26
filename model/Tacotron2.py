@@ -132,7 +132,7 @@ class Tacotron2(nn.Module):
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
         return self.parse_output(
-            [mel_outputs, mel_outputs_postnet, gate_outputs, alignments, attn_logprob, attn_hard],
+            [mel_outputs, mel_outputs_postnet, gate_outputs, alignments, attn_logprob, attn_hard, attn_soft],
             mel_lens)
 
     def inference(
