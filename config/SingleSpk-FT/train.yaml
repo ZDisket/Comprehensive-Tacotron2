@@ -18,7 +18,7 @@ optimizer:
   weight_decay: 0.000001
   grad_clip_thresh: 1.0
   grad_acc_step: 1
-  init_lr: 0.001
+  init_lr: 0.0006
 step:
   total_step: 900000
   log_step: 100
