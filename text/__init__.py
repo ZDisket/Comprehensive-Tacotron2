@@ -37,7 +37,10 @@ def cleaned_text_to_sequence(cleaned_text):
         sequence += _symbols_to_sequence(m.group(1))
         sequence += _arpabet_to_sequence(m.group(2))
         cleaned_text = m.group(3)
-
+        
+    # Append eos at the end of the sequence
+    sequence = sequence + [_symbol_to_id[eos]]
+    
     return sequence
 
 def text_to_sequence(text, cleaner_names):

@@ -83,7 +83,13 @@ def main(args, configs):
 
     # Training
     step = args.restore_step + 1
+    
     epoch = 1
+    if step > 1:
+        steps_per_epoch = len(dataset) // batch_size
+        current_epoch = step // steps_per_epoch
+        epoch = current_epoch
+        
     grad_acc_step = train_config["optimizer"]["grad_acc_step"]
     grad_clip_thresh = train_config["optimizer"]["grad_clip_thresh"]
     total_step = train_config["step"]["total_step"]
